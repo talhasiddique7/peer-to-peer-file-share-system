@@ -1,17 +1,10 @@
+import tkinter as tk
+from tkinter import messagebox, filedialog, simpledialog
+import os
 import socket
 import hashlib
-import os
 
-base_file_directory = './uploads/'
-# Helper function to compute SHA1 hash
-def compute_sha1(file_path):
-    sha1 = hashlib.sha1()
-    with open(file_path, 'rb') as f:
-        while chunk := f.read(4096):
-            sha1.update(chunk)
-    return sha1.hexdigest()
-
-# Send a message to the tracker and receive a response
+# Network communication functions
 def send_message(tracker_ip, tracker_port, message):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((tracker_ip, tracker_port))
@@ -20,187 +13,190 @@ def send_message(tracker_ip, tracker_port, message):
     client_socket.close()
     return response
 
-def register(tracker_ip, tracker_port):
-    username = input("Enter username: ")
-    password = input("Enter password: ")
-    print(send_message(tracker_ip, tracker_port, f"REGISTER:{username}:{password}"))
+# Helper function to compute SHA1
+def compute_sha1(file_path):
+    sha1 = hashlib.sha1()
+    with open(file_path, 'rb') as f:
+        while chunk := f.read(4096):
+            sha1.update(chunk)
+    return sha1.hexdigest()
 
-def login(tracker_ip, tracker_port):
-    while True:
-        username = input("Enter username: ")
-        password = input("Enter password: ")
-        response = send_message(tracker_ip, tracker_port, f"LOGIN:{username}:{password}")
-        print(response)
+# GUI Application Class
+class P2PApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("P2P File Sharing App")
+        self.geometry("400x300")
+        self.username = None
+        self.tracker_ip = '127.0.0.1'
+        self.tracker_port = 5000
+        self.show_login_screen()
+
+    # ---------------- Login Screen ----------------
+    def show_login_screen(self):
+        self.clear_screen()
+        tk.Label(self, text="Login to P2P App", font=("Arial", 16)).pack(pady=10)
+        tk.Label(self, text="Username:").pack()
+        self.username_entry = tk.Entry(self)
+        self.username_entry.pack()
+        tk.Label(self, text="Password:").pack()
+        self.password_entry = tk.Entry(self, show="*")
+        self.password_entry.pack()
+
+        tk.Button(self, text="Login", command=self.login).pack(pady=5)
+        tk.Button(self, text="Register", command=self.register).pack()
+
+    def login(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+        response = send_message(self.tracker_ip, self.tracker_port, f"LOGIN:{username}:{password}")
         if "successful" in response:
-            return username
-
-def logout(tracker_ip, tracker_port, username):
-    print(send_message(tracker_ip, tracker_port, f"LOGOUT:{username}"))
-    return None  # Reset username to return to login menu
-
-def create_group(tracker_ip, tracker_port, username):
-    group_id = input("Enter group ID: ")
-    print(send_message(tracker_ip, tracker_port, f"CREATE_GROUP:{username}:{group_id}"))
-
-def request_join_group(tracker_ip, tracker_port, username):
-    group_id = input("Enter group ID to request join: ")
-    print(send_message(tracker_ip, tracker_port, f"REQUEST_JOIN:{username}:{group_id}"))
-
-def view_requests(tracker_ip, tracker_port, username):
-    group_id = input("Enter group ID: ")
-    print(send_message(tracker_ip, tracker_port, f"VIEW_REQUESTS:{username}:{group_id}"))
-
-def handle_request(tracker_ip, tracker_port, username):
-    group_id = input("Enter group ID: ")
-    user = input("Enter the username to approve/reject: ")
-    decision = input("Approve or reject (approve/reject): ").strip().lower()
-    print(send_message(tracker_ip, tracker_port, f"HANDLE_REQUEST:{username}:{group_id}:{user}:{decision}"))
-
-def view_groups(tracker_ip, tracker_port, username):
-    response = send_message(tracker_ip, tracker_port, f"VIEW_GROUPS:{username}")
-    if response == "No groups available.":
-        print(response)
-        return None
-
-    groups = response.split(',')
-    for i, group in enumerate(groups, 1):
-        print(f"{i}. {group}")
-    try:
-        group_id = groups[int(input("Select a group: ")) - 1]
-        group_menu(tracker_ip, tracker_port, username, group_id)
-    except (IndexError, ValueError):
-        print("Invalid selection.")
-
-def group_menu(tracker_ip, tracker_port, username, group_id):
-    is_admin = send_message(tracker_ip, tracker_port, f"IS_ADMIN:{username}:{group_id}") == "True"
-
-    while True:
-        if is_admin:
-            print("\n1. Upload File\n2. Delete File\n3. Download File\n4. View Files\n5. View Requests\n6. Handle Request\n7. Back")
+            self.username = username
+            self.show_main_menu()
         else:
-            print("\n1. View Files\n2. Download File\n3. Back")
+            messagebox.showerror("Error", response)
 
-        choice = input("Choose an option: ")
+    def register(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+        response = send_message(self.tracker_ip, self.tracker_port, f"REGISTER:{username}:{password}")
+        messagebox.showinfo("Info", response)
 
-        if is_admin and choice == '1':
-            upload_file(tracker_ip, tracker_port, username, group_id)
-        elif not is_admin and choice=='1':
-            view_files(tracker_ip, tracker_port, group_id)
-        elif is_admin and choice == '2':
-            delete_file(tracker_ip, tracker_port, username, group_id)
-        elif (is_admin and choice == '3') or (not is_admin and choice == '2'):
-            download_file(tracker_ip, tracker_port, group_id)
-        elif choice == '4':
-            view_files(tracker_ip, tracker_port, group_id)
-        elif is_admin and choice == '5':
-            view_requests(tracker_ip, tracker_port, username)
-        elif is_admin and choice == '6':
-            handle_request(tracker_ip, tracker_port, username)
-        elif (is_admin and choice == '7') or (not is_admin and choice == '3'):
-            break
+    # ---------------- Main Menu ----------------
+    def show_main_menu(self):
+        self.clear_screen()
+        tk.Label(self, text=f"Welcome, {self.username}", font=("Arial", 16)).pack(pady=10)
+
+        tk.Button(self, text="Create Group", command=self.create_group).pack(pady=5)
+        tk.Button(self, text="Join Group", command=self.request_join_group).pack(pady=5)
+        tk.Button(self, text="View Groups", command=self.view_groups).pack(pady=5)
+        tk.Button(self, text="Logout", command=self.logout).pack(pady=5)
+
+    # ---------------- Manage Join Requests ----------------
+    def view_requests(self, group_id):
+        response = send_message(self.tracker_ip, self.tracker_port, f"VIEW_REQUESTS:{group_id}")
+        if response == "No pending requests.":
+            messagebox.showinfo("Info", response)
         else:
-            print("Invalid option.")
+            requests = response.split(",")
+            self.show_requests_menu(group_id, requests)
 
-def view_files(tracker_ip, tracker_port, group_id):
-    response = send_message(tracker_ip, tracker_port, f"VIEW_FILES:{group_id}")
-    if response == "No files available." or response == "Group not found.":
-        print(response)
-    else:
-        print("Available files:")
-        files = response.split(',')
-        for file in files:
-            print(file)
-
-def upload_file(tracker_ip, tracker_port, username, group_id):
-    file_path = input("Enter file path: ")
-    
-    if not os.path.exists(file_path):
-        print("File not found.")
-        return
-    
-    # Compute the SHA1 hash of the file
-    sha1_hash = compute_sha1(file_path)
-    
-    # Send the upload command to the tracker
-    response = send_message(tracker_ip, tracker_port, f"UPLOAD_FILE:{username}:{group_id}:{os.path.basename(file_path)}:{sha1_hash}")
-    
-    if response.startswith("UPLOAD_ACK"):
-        # Upload the file if the tracker acknowledges the upload
-        group_directory = os.path.join(base_file_directory, group_id)
-        os.makedirs(group_directory, exist_ok=True)  # Create the group directory if it doesn't exist
+    def show_requests_menu(self, group_id, requests):
+        self.clear_screen()
+        if not requests or requests == ['']:
+            tk.Label(self, text="No pending join requests", font=("Arial", 14), fg="red").pack(pady=10)
+        else:
+            tk.Label(self, text="Pending Join Requests", font=("Arial", 16)).pack(pady=10)
+            for req in requests:
+                if ":" in req:
+                    try:
+                        requester = req.split(":")[1]
+                        frame = tk.Frame(self)
+                        frame.pack(pady=5)
+                        tk.Label(frame, text=f"User: {requester}").pack(side="left")
+                        tk.Button(frame, text="Accept", command=lambda u=requester: self.manage_request(group_id, u, "ACCEPT")).pack(side="left")
+                        tk.Button(frame, text="Reject", command=lambda u=requester: self.manage_request(group_id, u, "REJECT")).pack(side="left")
+                    except ValueError:
+                        print(f"Invalid request format: {req}")
+                        tk.Label(self, text=f"Invalid request format: {req}", fg="red").pack(pady=10)
+                else:
+                    print(f"Invalid request format: {req}")
+                    tk.Label(self, text=f"Invalid request format: {req}", fg="red").pack(pady=10)
         
-        # Copy the file to the group's directory
-        destination_file_path = os.path.join(group_directory, os.path.basename(file_path))
-        with open(file_path, 'rb') as src_file:
-            with open(destination_file_path, 'wb') as dest_file:
-                dest_file.write(src_file.read())
+        tk.Button(self, text="Back", command=lambda: self.group_operations(group_id)).pack(pady=10)
+
+    def manage_request(self, group_id, requester, action):
+        response = send_message(self.tracker_ip, self.tracker_port, f"MANAGE_REQUEST:{self.username}:{group_id}:{requester}:{action}")
+        messagebox.showinfo("Info", response)
+        self.view_requests(group_id)
+
+    # ---------------- Group Functions ----------------
+    def create_group(self):
+        group_id = simpledialog.askstring("Input", "Enter Group ID:")
+        if group_id:
+            response = send_message(self.tracker_ip, self.tracker_port, f"CREATE_GROUP:{self.username}:{group_id}")
+            messagebox.showinfo("Info", response)
+
+    def request_join_group(self):
+        group_id = simpledialog.askstring("Input", "Enter Group ID:")
+        if group_id:
+            response = send_message(self.tracker_ip, self.tracker_port, f"REQUEST_JOIN:{self.username}:{group_id}")
+            messagebox.showinfo("Info", response)
+
+    def view_groups(self):
+        response = send_message(self.tracker_ip, self.tracker_port, f"VIEW_GROUPS:{self.username}")
+        if response == "No groups available.":
+            messagebox.showinfo("Info", response)
+        else:
+            groups = response.split(",")
+            self.show_group_menu(groups)
+
+    def logout(self):
+        response = send_message(self.tracker_ip, self.tracker_port, f"LOGOUT:{self.username}")
+        messagebox.showinfo("Info", response)
+        self.username = None
+        self.show_login_screen()
+
+    # ---------------- Group Menu ----------------
+    def show_group_menu(self, groups):
+        self.clear_screen()
+        tk.Label(self, text="Your Groups", font=("Arial", 16)).pack(pady=10)
+        for group in groups:
+            tk.Button(self, text=group, command=lambda g=group: self.group_operations(g)).pack(pady=5)
+        tk.Button(self, text="Back", command=self.show_main_menu).pack(pady=10)
+
+    def group_operations(self, group_id):
+        self.clear_screen()
+        tk.Label(self, text=f"Group: {group_id}", font=("Arial", 16)).pack(pady=10)
         
-        print(f"File '{os.path.basename(file_path)}' uploaded successfully to group '{group_id}'.")
-    else:
-        print("Upload failed:", response)
+        tk.Button(self, text="Upload File", command=lambda: self.upload_file(group_id)).pack(pady=5)
+        tk.Button(self, text="View Files", command=lambda: self.view_files(group_id)).pack(pady=5)
+        tk.Button(self, text="Download File", command=lambda: self.download_file(group_id)).pack(pady=5)
+        tk.Button(self, text="Manage Join Requests", command=lambda: self.view_requests(group_id)).pack(pady=5)
+        
+        tk.Button(self, text="Back", command=self.show_main_menu).pack(pady=10)
 
-def delete_file(tracker_ip, tracker_port, username, group_id):
-    file_name = input("Enter file name to delete: ")
-    print(send_message(tracker_ip, tracker_port, f"DELETE_FILE:{username}:{group_id}:{file_name}"))
+    def upload_file(self, group_id):
+        file_path = filedialog.askopenfilename(title="Select File to Upload")
+        if file_path:
+            sha1_hash = compute_sha1(file_path)
+            response = send_message(self.tracker_ip, self.tracker_port, f"UPLOAD_FILE:{self.username}:{group_id}:{os.path.basename(file_path)}:{sha1_hash}")
+            messagebox.showinfo("Info", response)
 
-# Download a file from the tracker and save it to a specified location
-def download_file(tracker_ip, tracker_port, group_id):
-    file_name = input("Enter the name of the file you want to download: ")
-    download_location = input("Enter the location where you want to save the file: ")
+    def view_files(self, group_id):
+        response = send_message(self.tracker_ip, self.tracker_port, f"VIEW_FILES:{group_id}")
+        if response == "No files available." or response == "Group not found.":
+            messagebox.showinfo("Info", response)
+        else:
+            files = response.split(",")
+            file = simpledialog.askstring("Files", f"Files:\n{', '.join(files)}\nEnter file name to download:")
+            if file:
+                self.download_file(group_id, file)
 
-    if not os.path.isdir(download_location):
-        print("Invalid download location.")
-        return
+    def download_file(self, group_id, file_name):
+        download_location = filedialog.askdirectory(title="Select Download Location")
+        if download_location:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.connect((self.tracker_ip, self.tracker_port))
+                sock.sendall(f"DOWNLOAD_FILE:{group_id}:{file_name}".encode())
+                response = sock.recv(1024).decode()
+                if response == "START_DOWNLOAD":
+                    file_path = os.path.join(download_location, file_name)
+                    with open(file_path, 'wb') as f:
+                        while True:
+                            chunk = sock.recv(4096)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                    messagebox.showinfo("Info", "File downloaded successfully.")
+                else:
+                    messagebox.showerror("Error", response)
 
-    # Create a socket and send the download request
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((tracker_ip, tracker_port))
-        sock.sendall(f"DOWNLOAD_FILE:{group_id}:{file_name}".encode())
+    def clear_screen(self):
+        for widget in self.winfo_children():
+            widget.destroy()
 
-        response = sock.recv(1024).decode()
-        if response != "START_DOWNLOAD":
-            print(f"Error: {response}")
-            return
-
-        # Open the file and start receiving data
-        file_path = os.path.join(download_location, file_name)
-        with open(file_path, 'wb') as f:
-            while True:
-                chunk = sock.recv(4096)
-                if chunk.endswith(b"END_OF_FILE"):
-                    f.write(chunk[:-11])  # Remove the EOF marker
-                    break
-                f.write(chunk)
-
-        print(f"File '{file_name}' downloaded successfully to '{download_location}'.")
-
-
-
+# Run the application
 if __name__ == "__main__":
-    tracker_ip = '127.0.0.1'
-    tracker_port = 5000
-
-    while True:
-        username = None
-        while not username:
-            print("\n1. Register\n2. Login")
-            choice = input("Choose an option: ")
-            if choice == '1':
-                register(tracker_ip, tracker_port)
-            elif choice == '2':
-                username = login(tracker_ip, tracker_port)
-
-        while username:
-            print("\n1. Create Group\n2. Request to Join Group\n3. View Groups\n4. Logout")
-            choice = input("Choose an option: ")
-
-            if choice == '1':
-                create_group(tracker_ip, tracker_port, username)
-            elif choice == '2':
-                request_join_group(tracker_ip, tracker_port, username)
-            elif choice == '3':
-                view_groups(tracker_ip, tracker_port, username)
-            elif choice == '4':
-                username = logout(tracker_ip, tracker_port, username)
-            else:
-                print("Invalid option.")
+    app = P2PApp()
+    app.mainloop()
