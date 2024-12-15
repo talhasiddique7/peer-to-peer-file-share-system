@@ -74,7 +74,8 @@ class P2PApp(tk.Tk):
 
     # ---------------- Manage Join Requests ----------------
     def view_requests(self, group_id):
-        response = send_message(self.tracker_ip, self.tracker_port, f"VIEW_REQUESTS:{group_id}")
+        response = send_message(self.tracker_ip, self.tracker_port, f"VIEW_REQUESTS:{self.username}:{group_id}")
+        print(f"View requests response: {response}")
         if response == "No pending requests.":
             messagebox.showinfo("Info", response)
         else:
@@ -87,21 +88,12 @@ class P2PApp(tk.Tk):
             tk.Label(self, text="No pending join requests", font=("Arial", 14), fg="red").pack(pady=10)
         else:
             tk.Label(self, text="Pending Join Requests", font=("Arial", 16)).pack(pady=10)
-            for req in requests:
-                if ":" in req:
-                    try:
-                        requester = req.split(":")[1]
-                        frame = tk.Frame(self)
-                        frame.pack(pady=5)
-                        tk.Label(frame, text=f"User: {requester}").pack(side="left")
-                        tk.Button(frame, text="Accept", command=lambda u=requester: self.manage_request(group_id, u, "ACCEPT")).pack(side="left")
-                        tk.Button(frame, text="Reject", command=lambda u=requester: self.manage_request(group_id, u, "REJECT")).pack(side="left")
-                    except ValueError:
-                        print(f"Invalid request format: {req}")
-                        tk.Label(self, text=f"Invalid request format: {req}", fg="red").pack(pady=10)
-                else:
-                    print(f"Invalid request format: {req}")
-                    tk.Label(self, text=f"Invalid request format: {req}", fg="red").pack(pady=10)
+            for requester in requests:
+                frame = tk.Frame(self)
+                frame.pack(pady=5)
+                tk.Label(frame, text=f"User: {requester}").pack(side="left")
+                tk.Button(frame, text="Accept", command=lambda u=requester: self.manage_request(group_id, u, "approve")).pack(side="left")
+                tk.Button(frame, text="Reject", command=lambda u=requester: self.manage_request(group_id, u, "reject")).pack(side="left")
         
         tk.Button(self, text="Back", command=lambda: self.group_operations(group_id)).pack(pady=10)
 
@@ -146,6 +138,7 @@ class P2PApp(tk.Tk):
         tk.Button(self, text="Back", command=self.show_main_menu).pack(pady=10)
 
     def group_operations(self, group_id):
+        print(group_id)
         self.clear_screen()
         tk.Label(self, text=f"Group: {group_id}", font=("Arial", 16)).pack(pady=10)
         
@@ -172,7 +165,21 @@ class P2PApp(tk.Tk):
             file = simpledialog.askstring("Files", f"Files:\n{', '.join(files)}\nEnter file name to download:")
             if file:
                 self.download_file(group_id, file)
+    def group_operations(self, group_id):
+        self.clear_screen()
+        tk.Label(self, text=f"Group: {group_id}", font=("Arial", 16)).pack(pady=10)
+        
+        tk.Button(self, text="Upload File", command=lambda: self.upload_file(group_id)).pack(pady=5)
+        tk.Button(self, text="View Files", command=lambda: self.view_files(group_id)).pack(pady=5)
+        tk.Button(self, text="Download File", command=lambda: self.prompt_download_file(group_id)).pack(pady=5)
+        tk.Button(self, text="Manage Join Requests", command=lambda: self.view_requests(group_id)).pack(pady=5)
+        
+        tk.Button(self, text="Back", command=self.show_main_menu).pack(pady=10)
 
+    def prompt_download_file(self, group_id):
+        file_name = simpledialog.askstring("Input", "Enter File Name to Download:")
+        if file_name:
+          self.download_file(group_id, file_name)
     def download_file(self, group_id, file_name):
         download_location = filedialog.askdirectory(title="Select Download Location")
         if download_location:

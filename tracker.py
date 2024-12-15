@@ -10,6 +10,7 @@ user_db = {}  # Stores user credentials and group memberships
 logged_in_users = {}  # Tracks currently logged-in users
 groups = {}  # Stores group information and files
 base_file_directory = './uploads/'  # Base directory for storing files
+os.makedirs(base_file_directory, exist_ok=True)  # Base directory for storing files
 
 lock = Lock()  # Lock for synchronizing access to shared resources
 
@@ -77,13 +78,11 @@ def view_requests(admin, group_id):
         return "Unauthorized action."
     if not groups[group_id]['requests']:
         return "No pending requests."
-    # Format: "group_id:requester"
-    return ','.join([f"{group_id}:{user}" for user in groups[group_id]['requests']])
-
-
+    # Return only the requester names
+    return ','.join(groups[group_id]['requests'])
 
 # Approve or reject join requests
-def handle_request(admin, group_id, user, decision):
+def manage_request(admin, group_id, user, decision):
     with lock:
         if group_id not in groups or groups[group_id]['admin'] != admin:
             return "Unauthorized action."
@@ -117,6 +116,11 @@ def upload_file(username, group_id, file_name, sha1_hash):
 
         group_directory = os.path.join(base_file_directory, group_id)
         os.makedirs(group_directory, exist_ok=True)
+
+        file_path = os.path.join(group_directory, file_name)
+        with open(file_path, 'wb') as f:
+            f.write(b'')  # Create an empty file for now
+        print(f"File created at: {file_path}")
 
         groups[group_id]['files'][file_name] = {'sha1': sha1_hash, 'owner': username}
     return f"UPLOAD_ACK: File '{file_name}' uploaded successfully to group '{group_id}'."
@@ -172,9 +176,12 @@ def handle_client(conn, addr):
             elif command == "REQUEST_JOIN":
                 response = request_join_group(*params)
             elif command == "VIEW_REQUESTS":
-                response = view_requests(*params)
-            elif command == "HANDLE_REQUEST":
-                response = handle_request(*params)
+                if len(params) == 2:
+                    response = view_requests(params[0], params[1])
+                else:
+                    response = "Invalid parameters for VIEW_REQUESTS."
+            elif command == "MANAGE_REQUEST":
+                response = manage_request(*params)
             elif command == "IS_ADMIN":
                 response = is_admin(*params)
             elif command == "VIEW_GROUPS":
