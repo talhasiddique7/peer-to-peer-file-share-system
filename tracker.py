@@ -109,21 +109,39 @@ def view_groups(username):
     return "No groups available."
 
 # Upload a file
-def upload_file(username, group_id, file_name, sha1_hash):
+def upload_file(conn, username, group_id, file_name, sha1_hash):
     with lock:
         if group_id not in groups:
-            return "Group not found."
+            conn.sendall("Group not found.".encode())
+            return
 
         group_directory = os.path.join(base_file_directory, group_id)
         os.makedirs(group_directory, exist_ok=True)
 
         file_path = os.path.join(group_directory, file_name)
+        conn.sendall("READY_TO_RECEIVE".encode())  # Acknowledge readiness
+
+        # Receive the file data
+        empty_chunk_count = 0
         with open(file_path, 'wb') as f:
-            f.write(b'')  # Create an empty file for now
-        print(f"File created at: {file_path}")
+            while True:
+                chunk = conn.recv(4096)
+                if chunk == b"END_OF_FILE":
+                    break
+                if not chunk:
+                    empty_chunk_count += 1
+                    print("Received empty chunk")
+                    if empty_chunk_count > 10:  # Break after 10 consecutive empty chunks
+                        print("Too many empty chunks, breaking the loop")
+                        break
+                else:
+                    empty_chunk_count = 0
+                    f.write(chunk)
+                    print(f"Received chunk of size {len(chunk)}")
 
         groups[group_id]['files'][file_name] = {'sha1': sha1_hash, 'owner': username}
-    return f"UPLOAD_ACK: File '{file_name}' uploaded successfully to group '{group_id}'."
+        conn.sendall(f"File '{file_name}' uploaded successfully to group '{group_id}'.".encode())
+
 
 # Delete a file from a group (Admin only)
 def delete_file(username, group_id, file_name):
@@ -187,7 +205,8 @@ def handle_client(conn, addr):
             elif command == "VIEW_GROUPS":
                 response = view_groups(params[0])
             elif command == "UPLOAD_FILE":
-                response = upload_file(*params)
+                upload_file(conn,*params)
+                return
             elif command == "DELETE_FILE":
                 response = delete_file(*params)
             elif command == "DOWNLOAD_FILE":

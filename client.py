@@ -153,8 +153,22 @@ class P2PApp(tk.Tk):
         file_path = filedialog.askopenfilename(title="Select File to Upload")
         if file_path:
             sha1_hash = compute_sha1(file_path)
-            response = send_message(self.tracker_ip, self.tracker_port, f"UPLOAD_FILE:{self.username}:{group_id}:{os.path.basename(file_path)}:{sha1_hash}")
-            messagebox.showinfo("Info", response)
+            file_name = os.path.basename(file_path)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.connect((self.tracker_ip, self.tracker_port))
+                sock.sendall(f"UPLOAD_FILE:{self.username}:{group_id}:{file_name}:{sha1_hash}".encode())
+            
+                # Wait for server to acknowledge before sending file data
+                response = sock.recv(1024).decode()
+                if response == "READY_TO_RECEIVE":
+                    with open(file_path, 'rb') as f:
+                        while chunk := f.read(4096):
+                            sock.sendall(chunk)
+                    sock.sendall(b"END_OF_FILE")
+                    messagebox.showinfo("Info", "File uploaded successfully.")
+                else:
+                    messagebox.showerror("Error", response)
+
 
     def view_files(self, group_id):
         response = send_message(self.tracker_ip, self.tracker_port, f"VIEW_FILES:{group_id}")
